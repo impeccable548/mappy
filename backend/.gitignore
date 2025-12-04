@@ -1,0 +1,25 @@
+# Python Environment and Dependencies
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv/
+env/
+
+# IDE and Editor Files (Optional, but recommended)
+.idea/
+*.swp
+*~
+
+# Flask specific files
+instance/
+.flaskenv
+
+# Log files and database files
+*.log
+*.sqlite
+
+# OS generated files
+.DS_Store
+Thumbs.db
