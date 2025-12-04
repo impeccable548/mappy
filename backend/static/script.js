@@ -62,6 +62,63 @@ function initMap() {
     });
 
     window.goldIcon = goldIcon;
+
+    // Add click handler to map
+    map.on('click', function(e) {
+        handleMapClick(e.latlng);
+    });
+}
+
+// Handle map clicks
+function handleMapClick(latlng) {
+    if (!userLocation) {
+        showNotification('Enable location first to calculate distances', 'error');
+        return;
+    }
+
+    // Set as destination
+    destinationLocation = {
+        lat: latlng.lat,
+        lon: latlng.lng,
+        display_name: `Coordinates: ${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`
+    };
+
+    // Remove previous search marker
+    if (searchMarker) {
+        map.removeLayer(searchMarker);
+    }
+
+    // Add marker at clicked location
+    searchMarker = L.marker([latlng.lat, latlng.lng], {
+        icon: window.goldIcon
+    }).addTo(map);
+
+    searchMarker.bindPopup('<b style="color: #FFD700;">📍 Selected Location</b>').openPopup();
+
+    // Calculate routes
+    calculateAllRoutes();
+
+    // Reverse geocode to get place name
+    reverseGeocodeDestination(latlng.lat, latlng.lng);
+}
+
+// Reverse geocode destination
+async function reverseGeocodeDestination(lat, lon) {
+    try {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+        const response = await fetch(url, {
+            headers: { 'User-Agent': 'Mappy-App/1.0' }
+        });
+        const data = await response.json();
+
+        if (data.display_name) {
+            destinationLocation.display_name = data.display_name;
+            updateInfoPanel(destinationLocation);
+        }
+    } catch (error) {
+        console.error('Reverse geocode error:', error);
+    }
 }
 
 // Request user location with high accuracy
@@ -77,15 +134,20 @@ function requestLocation() {
             position => {
                 updateUserLocation(position);
                 document.getElementById('location-prompt').classList.add('hidden');
-                showNotification('🎯 Location enabled! You\'re on the map!');
+                showNotification('🎯 Location enabled! Click anywhere on map to measure distance!');
+                
+                // Auto-enable tracking
+                setTimeout(() => {
+                    toggleTracking();
+                }, 1000);
             },
             error => {
                 console.error('Location error:', error);
                 let errorMsg = 'Could not get your location.';
-                if (error.code === 1) errorMsg = 'Location permission denied.';
-                else if (error.code === 2) errorMsg = 'Location unavailable.';
-                else if (error.code === 3) errorMsg = 'Location request timed out.';
-                
+                if (error.code === 1) errorMsg = 'Location permission denied. Please enable in browser settings.';
+                else if (error.code === 2) errorMsg = 'Location unavailable. Check GPS settings.';
+                else if (error.code === 3) errorMsg = 'Location request timed out. Try again.';
+
                 showNotification(errorMsg, 'error');
                 document.getElementById('location-prompt').classList.add('hidden');
             },
@@ -106,7 +168,7 @@ function updateUserLocation(position) {
         altitude: position.coords.altitude,
         heading: position.coords.heading
     };
-    
+
     // Update or add user marker with pulsing effect
     if (userMarker) {
         userMarker.setLatLng([userLocation.lat, userLocation.lon]);
@@ -114,11 +176,11 @@ function updateUserLocation(position) {
         userMarker = L.marker([userLocation.lat, userLocation.lon], {
             icon: window.pulsingIcon
         }).addTo(map);
-        
+
         userMarker.bindPopup('<b style="color: #FFD700;">📍 You are here!</b>').openPopup();
         map.setView([userLocation.lat, userLocation.lon], 13);
     }
-    
+
     // Update or add accuracy circle
     if (accuracyCircle) {
         accuracyCircle.setLatLng([userLocation.lat, userLocation.lon]);
@@ -132,10 +194,10 @@ function updateUserLocation(position) {
             weight: 2
         }).addTo(map);
     }
-    
+
     // Update stats bar
     updateStatsBar();
-    
+
     // Recalculate all routes if destination exists
     if (destinationLocation) {
         calculateAllRoutes();
@@ -147,14 +209,14 @@ function updateStatsBar() {
     if (userLocation) {
         // Get location name
         reverseGeocode(userLocation.lat, userLocation.lon);
-        
+
         // Update accuracy
-        document.getElementById('gps-accuracy').textContent = 
+        document.getElementById('gps-accuracy').textContent =
             `${Math.round(userLocation.accuracy)}m accuracy`;
-        
+
         // Update altitude
         if (userLocation.altitude) {
-            document.getElementById('altitude').textContent = 
+            document.getElementById('altitude').textContent =
                 `${Math.round(userLocation.altitude)}m alt`;
         }
     }
@@ -163,14 +225,15 @@ function updateStatsBar() {
 // Reverse geocode to get location name
 async function reverseGeocode(lat, lon) {
     try {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
         const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
         const response = await fetch(url, {
             headers: { 'User-Agent': 'Mappy-App/1.0' }
         });
         const data = await response.json();
-        
+
         if (data.address) {
-            const location = data.address.city || data.address.town || 
+            const location = data.address.city || data.address.town ||
                            data.address.village || data.address.county || 'Unknown';
             document.getElementById('current-location').textContent = location;
         }
@@ -182,7 +245,7 @@ async function reverseGeocode(lat, lon) {
 // Toggle live tracking
 function toggleTracking() {
     const trackingBtn = document.getElementById('tracking-btn');
-    
+
     if (isTracking) {
         // Stop tracking
         if (watchId !== null) {
@@ -200,16 +263,16 @@ function toggleTracking() {
                 timeout: 5000,
                 maximumAge: 0
             };
-            
+
             watchId = navigator.geolocation.watchPosition(
                 position => updateUserLocation(position),
                 error => console.error('Tracking error:', error),
                 options
             );
-            
+
             isTracking = true;
             trackingBtn.classList.add('active');
-            showNotification('🔴 Live tracking enabled!');
+            showNotification('🔴 Live tracking enabled! Your location updates automatically');
         }
     }
 }
@@ -227,7 +290,7 @@ function recenterMap() {
     }
 }
 
-// Search for location
+// Search for location with improved error handling
 async function searchLocation(query) {
     if (!query.trim()) {
         showNotification('Please enter a location to search.', 'error');
@@ -237,6 +300,9 @@ async function searchLocation(query) {
     showNotification('🔍 Searching...');
 
     try {
+        // Add delay to respect Nominatim rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
         const response = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -247,19 +313,19 @@ async function searchLocation(query) {
 
         if (data.success) {
             destinationLocation = data.location;
-            
+
             // Remove previous search marker
             if (searchMarker) {
                 map.removeLayer(searchMarker);
             }
-            
+
             // Add new search marker
             searchMarker = L.marker([destinationLocation.lat, destinationLocation.lon], {
                 icon: window.goldIcon
             }).addTo(map);
-            
+
             searchMarker.bindPopup(`<b style="color: #FFD700;">📍 ${destinationLocation.display_name}</b>`).openPopup();
-            
+
             // Fit bounds to show both markers
             if (userLocation) {
                 const bounds = L.latLngBounds(
@@ -267,23 +333,23 @@ async function searchLocation(query) {
                     [destinationLocation.lat, destinationLocation.lon]
                 );
                 map.fitBounds(bounds, { padding: [100, 100] });
-                
+
                 // Calculate routes for all modes
                 calculateAllRoutes();
             } else {
                 map.setView([destinationLocation.lat, destinationLocation.lon], 13);
             }
-            
+
             // Show info panel
             updateInfoPanel(destinationLocation);
             showNotification('✅ Location found!');
-            
+
         } else {
-            showNotification('Location not found. Try being more specific.', 'error');
+            showNotification('Location not found. Try: "Paris, France" or "Harvard University"', 'error');
         }
     } catch (error) {
         console.error('Search error:', error);
-        showNotification('Search failed. Please try again.', 'error');
+        showNotification('Search failed. Check your connection and try again.', 'error');
     }
 }
 
@@ -292,9 +358,10 @@ async function calculateAllRoutes() {
     if (!userLocation || !destinationLocation) return;
 
     const modes = ['driving', 'walking', 'cycling'];
-    
+
     for (const mode of modes) {
         try {
+            await new Promise(resolve => setTimeout(resolve, 500)); // Delay between requests
             const response = await fetch('/api/route', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -315,25 +382,26 @@ async function calculateAllRoutes() {
             console.error(`Route error for ${mode}:`, error);
         }
     }
-    
+
     // Calculate flying route
     const distance = calculateDistance(
         userLocation.lat, userLocation.lon,
         destinationLocation.lat, destinationLocation.lon
     );
     const flightTimeHours = distance / 800;
-    
+
     allRouteData['flying'] = {
         distance: distance * 1000,
         duration: flightTimeHours * 3600,
         isStraightLine: true
     };
-    
+
     updateModeButton('flying', allRouteData['flying']);
-    
+
     // Display current mode route
     displayRoute(currentTravelMode);
 }
+
 // Update mode button with time
 function updateModeButton(mode, routeData) {
     const timeElement = document.getElementById(`${mode === 'driving' ? 'drive' : mode === 'walking' ? 'walk' : mode === 'cycling' ? 'cycle' : 'fly'}-time`);
@@ -345,14 +413,14 @@ function updateModeButton(mode, routeData) {
 // Display route for specific mode
 function displayRoute(mode) {
     if (!allRouteData[mode]) return;
-    
+
     // Remove previous route
     if (routeLine) {
         map.removeLayer(routeLine);
     }
-    
+
     const route = allRouteData[mode];
-    
+
     if (route.geometry) {
         // Draw road route
         const coordinates = route.geometry.map(coord => [coord[1], coord[0]]);
@@ -376,10 +444,9 @@ function displayRoute(mode) {
             lineJoin: 'round'
         }).addTo(map);
     }
-    
     // Animate route
     animateRoute(routeLine);
-    
+
     // Update info panel
     updateInfoPanelWithRoute(route);
 }
@@ -411,7 +478,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 function updateInfoPanel(location) {
     const infoPanel = document.getElementById('info-panel');
     const infoContent = document.getElementById('info-content');
-    
+
     infoContent.innerHTML = `
         <div class="info-item">
             <div class="info-label">📍 Location</div>
@@ -422,7 +489,7 @@ function updateInfoPanel(location) {
             <div class="info-value">${location.lat.toFixed(6)}, ${location.lon.toFixed(6)}</div>
         </div>
     `;
-    
+
     infoPanel.classList.add('active');
 }
 
@@ -431,16 +498,16 @@ function updateInfoPanelWithRoute(route) {
     const infoContent = document.getElementById('info-content');
     const distance = (route.distance / 1000).toFixed(2);
     const duration = formatDuration(route.duration);
-    
+
     const modeEmojis = {
         driving: '🚗',
         walking: '🚶',
         cycling: '🚴',
         flying: '✈️'
     };
-    
+
     const existingInfo = infoContent.innerHTML;
-    
+
     infoContent.innerHTML = existingInfo + `
         <div class="info-item">
             <div class="info-label">${modeEmojis[currentTravelMode]} Distance</div>
@@ -457,7 +524,7 @@ function updateInfoPanelWithRoute(route) {
 function formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    
+
     if (hours > 24) {
         const days = Math.floor(hours / 24);
         const remainingHours = hours % 24;
@@ -474,12 +541,12 @@ function changeLayer(layerType) {
     if (activeLayer) {
         map.removeLayer(activeLayer);
     }
-    
+
     activeLayer = L.tileLayer(tileLayers[layerType].url, {
         attribution: tileLayers[layerType].attribution,
         maxZoom: 20
     }).addTo(map);
-    
+
     currentLayer = layerType;
     showNotification(`Map style changed to ${layerType}`);
 }
@@ -488,7 +555,7 @@ function changeLayer(layerType) {
 function toggleCompass() {
     const compassOverlay = document.getElementById('compass-overlay');
     const compassBtn = document.getElementById('compass-btn');
-    
+
     if (compassOverlay.classList.contains('active')) {
         compassOverlay.classList.remove('active');
         compassBtn.classList.remove('active');
@@ -512,7 +579,7 @@ function handleOrientation(event) {
     const heading = event.alpha; // 0-360 degrees
     const needle = document.getElementById('compass-needle');
     const bearing = document.getElementById('compass-bearing');
-    
+
     if (heading !== null) {
         needle.style.transform = `translate(-50%, -100%) rotate(${-heading}deg)`;
         bearing.textContent = `${Math.round(heading)}°`;
@@ -523,7 +590,7 @@ function handleOrientation(event) {
 function shareLocation() {
     if (userLocation) {
         const url = `https://www.google.com/maps?q=${userLocation.lat},${userLocation.lon}`;
-        
+
         if (navigator.share) {
             navigator.share({
                 title: 'My Location - Mappy',
@@ -555,39 +622,39 @@ function copyToClipboard(text) {
 let recognition;
 function toggleVoiceSearch() {
     const voiceBtn = document.getElementById('voice-search-btn');
-    
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
         showNotification('Voice search not supported', 'error');
         return;
     }
-    
+
     if (!recognition) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
-        
+
         recognition.onstart = () => {
             voiceBtn.classList.add('listening');
             showNotification('🎤 Listening...');
         };
-        
+
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
             document.getElementById('search-input').value = transcript;
             searchLocation(transcript);
         };
-        
+
         recognition.onend = () => {
             voiceBtn.classList.remove('listening');
         };
-        
+
         recognition.onerror = (event) => {
             voiceBtn.classList.remove('listening');
             showNotification('Voice search error', 'error');
         };
     }
-    
+
     recognition.start();
 }
 
@@ -609,44 +676,43 @@ function showNotification(message, type = 'success') {
     `;
     notification.textContent = message;
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
         notification.style.animation = 'fadeOut 0.3s ease-out';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
 }
-
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
-    
+
     // Location buttons
     document.getElementById('enable-location').addEventListener('click', requestLocation);
     document.getElementById('skip-location').addEventListener('click', () => {
         document.getElementById('location-prompt').classList.add('hidden');
     });
-    
+
     // Search
     document.getElementById('search-btn').addEventListener('click', () => {
         searchLocation(document.getElementById('search-input').value);
     });
-    
+
     document.getElementById('search-input').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') searchLocation(e.target.value);
     });
-    
+
     // Voice search
     document.getElementById('voice-search-btn').addEventListener('click', toggleVoiceSearch);
-    
+
     // Floating controls
     document.getElementById('recenter-btn').addEventListener('click', recenterMap);
     document.getElementById('tracking-btn').addEventListener('click', toggleTracking);
     document.getElementById('compass-btn').addEventListener('click', toggleCompass);
-    
+
     document.getElementById('layers-btn').addEventListener('click', () => {
         document.getElementById('layer-panel').classList.toggle('active');
     });
-    
+
     // Layer selection
     document.querySelectorAll('.layer-option').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -656,26 +722,26 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('layer-panel').classList.remove('active');
         });
     });
-    
+
     document.getElementById('close-layers').addEventListener('click', () => {
         document.getElementById('layer-panel').classList.remove('active');
     });
-    
+
     // Share location
     document.getElementById('share-location-btn').addEventListener('click', shareLocation);
-    
+
     // Info panel
     document.getElementById('close-info').addEventListener('click', () => {
         document.getElementById('info-panel').classList.remove('active');
     });
-    
+
     // Travel modes
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentTravelMode = btn.dataset.mode;
-            
+
             if (userLocation && destinationLocation) {
                 displayRoute(currentTravelMode);
             }
