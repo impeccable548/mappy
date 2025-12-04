@@ -3,81 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mappy - Modern Map Explorer</title>
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SJPdeE10S54+c7zYd="
-          crossorigin="anonymous"/>
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" 
-          integrity="sha512-1ycn6IcaQQ403l+TudH3uL6e+46f90YtJbFvK9B+j0wW/0+4s0g4G3+D7G2l7Iq7l7QoO9v9P2t3z8v8pQ==" 
-          crossorigin="anonymous" referrerpolicy="no-referrer" />
-
+    <title>Mappy - Your World Navigator</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div id="map-container" role="main">
-        <div id="map" aria-label="Interactive Map"></div>
-
-        <aside id="sidebar">
-            <header>
-                <h1><i class="fas fa-route"></i> mappy</h1>
-                <p>Find your way, effortlessly with a straight-line approximation.</p>
-            </header>
-
-            <div class="settings">
-                <span>Theme</span>
-                <div class="toggle-switch-container">
-                    <span>Light</span>
-                    <input type="checkbox" id="theme-toggle">
-                    <label for="theme-toggle"></label>
-                    <span>Dark</span>
-                </div>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-logo">📍</div>
+            <h1 class="loading-title">MAPPY</h1>
+            <p class="loading-text">Initializing your world...</p>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
             </div>
-
-            <div id="search-box">
-                <input type="text" id="search-input" placeholder="Search a location or address..." aria-label="Search for a location or address">
-                <button id="search-button" aria-label="Search">Search</button>
-            </div>
-
-            <div id="info-panel" class="hidden" role="region" aria-live="polite">
-                <h2>Directions</h2>
-                <p>From: <strong>Your Current Location</strong></p>
-                <p>To: <strong id="destination-name">Destination</strong></p>
-
-                <div class="route-details-grid">
-                    <div class="route-card" role="group" aria-labelledby="walk-title">
-                        <h3 id="walk-title">🚶 Walk</h3>
-                        <p>Distance: <span id="walk-distance" class="value">-</span></p>
-                        <p>Time: <span id="walk-time" class="value">-</span></p>
-                    </div>
-
-                    <div class="route-card" role="group" aria-labelledby="drive-title">
-                        <h3 id="drive-title">🚗 Drive</h3>
-                        <p>Distance: <span id="drive-distance" class="value">-</span></p>
-                        <p>Time: <span id="drive-time" class="value">-</span></p>
-                    </div>
-
-                    <div class="route-card" role="group" aria-labelledby="bike-title">
-                        <h3 id="bike-title">🚲 Ride</h3>
-                        <p>Distance: <span id="bike-distance" class="value">-</span></p>
-                        <p>Time: <span id="bike-time" class="value">-</span></p>
-                    </div>
-                </div>
-
-                <button id="clear-route-button">Clear Route</button>
-            </div>
-
-            <footer class="footer">
-                Powered by Leaflet, Nominatim, & OpenStreetMap
-            </footer>
-        </aside>
+        </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-            integrity="sha256-2Pmvv0kuTBOzK08F1D+7WmY2qSg5RW54m6kyk+POjV7="
-            crossorigin="anonymous"></script>
+    <!-- Main App Container -->
+    <div id="app-container" class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">📍</span>
+                <span class="logo-text">MAPPY</span>
+            </div>
+            <div class="header-right">
+                <div class="header-subtitle">Navigate Your World</div>
+                <button id="share-location-btn" class="share-btn" title="Share Location">
+                    <span>🔗</span>
+                </button>
+            </div>
+        </header>
 
+        <!-- Search Bar -->
+        <div class="search-container">
+            <div class="search-box">
+                <input 
+                    type="text" 
+                    id="search-input" 
+                    class="search-input" 
+                    placeholder="Search any place in the world... (Try: 'Eiffel Tower', 'Harvard Law School')"
+                    autocomplete="off"
+                />
+                <button id="search-btn" class="search-btn">
+                    <span class="search-icon">🔍</span>
+                </button>
+                <button id="voice-search-btn" class="voice-btn" title="Voice Search">
+                    <span class="voice-icon">🎤</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div id="map" class="map-container"></div>
+
+        <!-- Floating Controls -->
+        <div class="floating-controls">
+            <button id="recenter-btn" class="control-btn" title="Return to My Location">
+                <span class="control-icon">🎯</span>
+            </button>
+            <button id="tracking-btn" class="control-btn" title="Enable Live Tracking">
+                <span class="control-icon">📡</span>
+            </button>
+            <button id="compass-btn" class="control-btn" title="Enable Compass">
+                <span class="control-icon">🧭</span>
+            </button>
+            <button id="layers-btn" class="control-btn" title="Map Layers">
+                <span class="control-icon">🗺️</span>
+            </button>
+        </div>
+
+        <!-- Layer Selector -->
+        <div id="layer-panel" class="layer-panel">
+            <div class="layer-header">
+                <h3>Map Style</h3>
+                <button id="close-layers" class="close-btn">✕</button>
+            </div>
+            <div class="layer-options">
+                <button class="layer-option active" data-layer="dark">
+                    <span class="layer-preview dark-preview"></span>
+                    <span>Dark Mode</span>
+                </button>
+                <button class="layer-option" data-layer="street">
+                    <span class="layer-preview street-preview"></span>
+                    <span>Street View</span>
+                </button>
+                <button class="layer-option" data-layer="satellite">
+                    <span class="layer-preview satellite-preview"></span>
+                    <span>Satellite</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Info Panel -->
+        <div id="info-panel" class="info-panel">
+            <div class="info-header">
+                <h3>Location Details</h3>
+                <button id="close-info" class="close-btn">✕</button>
+            </div>
+            <div id="info-content" class="info-content">
+                <p class="info-placeholder">Search for a location to see details</p>
+            </div>
+        </div>
+
+        <!-- Travel Mode Selector -->
+        <div id="travel-modes" class="travel-modes">
+            <button class="mode-btn active" data-mode="driving" title="Driving">
+                <span class="mode-icon">🚗</span>
+                <span class="mode-label">Drive</span>
+                <span class="mode-time" id="drive-time">--</span>
+            </button>
+            <button class="mode-btn" data-mode="walking" title="Walking">
+                <span class="mode-icon">🚶</span>
+                <span class="mode-label">Walk</span>
+                <span class="mode-time" id="walk-time">--</span>
+            </button>
+            <button class="mode-btn" data-mode="cycling" title="Cycling">
+                <span class="mode-icon">🚴</span>
+                <span class="mode-label">Cycle</span>
+                <span class="mode-time" id="cycle-time">--</span>
+            </button>
+            <button class="mode-btn" data-mode="flying" title="Flying">
+                <span class="mode-icon">✈️</span>
+                <span class="mode-label">Fly</span>
+                <span class="mode-time" id="fly-time">--</span>
+            </button>
+        </div>
+
+        <!-- Quick Stats Bar -->
+        <div id="stats-bar" class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-icon">📍</span>
+                <span class="stat-value" id="current-location">Detecting...</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon">⚡</span>
+                <span class="stat-value" id="gps-accuracy">-- m</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon">🌐</span>
+                <span class="stat-value" id="altitude">-- m</span>
+            </div>
+        </div>
+
+        <!-- Location Permission Prompt -->
+        <div id="location-prompt" class="location-prompt">
+            <div class="prompt-content">
+                <div class="prompt-icon">📍</div>
+                <h3>Enable Location Access</h3>
+                <p>Mappy needs your location to show you on the map and calculate distances</p>
+                <div class="permission-features">
+                    <div class="feature-item">✓ Live tracking</div>
+                    <div class="feature-item">✓ Accurate directions</div>
+                    <div class="feature-item">✓ Distance calculations</div>
+                    <div class="feature-item">✓ Nearby search</div>
+                </div>
+                <button id="enable-location" class="btn-primary">Enable Location</button>
+                <button id="skip-location" class="btn-secondary">Skip for Now</button>
+            </div>
+        </div>
+
+        <!-- Compass Overlay -->
+        <div id="compass-overlay" class="compass-overlay">
+            <div class="compass-circle">
+                <div class="compass-needle" id="compass-needle"></div>
+                <div class="compass-label north">N</div>
+                <div class="compass-label east">E</div>
+                <div class="compass-label south">S</div>
+                <div class="compass-label west">W</div>
+            </div>
+            <div class="compass-bearing" id="compass-bearing">0°</div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Custom JS -->
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
