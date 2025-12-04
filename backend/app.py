@@ -1,7 +1,11 @@
 from flask import Flask, render_template, jsonify, request
 import requests
+import time
 
 app = Flask(__name__)
+
+# Cache to avoid rate limiting
+last_request_time = 0
 
 @app.route('/')
 def index():
@@ -10,6 +14,8 @@ def index():
 @app.route('/api/search', methods=['POST'])
 def search_location():
     """Search for a location using Nominatim API"""
+    global last_request_time
+    
     data = request.json
     query = data.get('query', '')
     
@@ -17,22 +23,32 @@ def search_location():
         return jsonify({'error': 'No query provided'}), 400
     
     try:
+        # Respect rate limiting (1 request per second)
+        current_time = time.time()
+        time_since_last = current_time - last_request_time
+        if time_since_last < 1.0:
+            time.sleep(1.0 - time_since_last)
+        
+        last_request_time = time.time()
+        
         # Using Nominatim for geocoding
         url = 'https://nominatim.openstreetmap.org/search'
         params = {
             'q': query,
             'format': 'json',
-            'limit': 1,
-            'addressdetails': 1
+            'limit': 5,  # Get more results
+            'addressdetails': 1,
+            'accept-language': 'en'
         }
         headers = {
-            'User-Agent': 'Mappy-App/1.0'
+            'User-Agent': 'Mappy-App/1.0 (Educational Project)'
         }
         
-        response = requests.get(url, params=params, headers=headers)
+        response = requests.get(url, params=params, headers=headers, timeout=10)
         results = response.json()
         
-        if results:
+        if results and len(results) > 0:
+            # Return the best result
             location = results[0]
             return jsonify({
                 'success': True,
@@ -43,10 +59,22 @@ def search_location():
                 }
             })
         else:
-            return jsonify({'success': False, 'error': 'Location not found'}), 404
+            return jsonify({
+                'success': False, 
+                'error': 'Location not found. Try: "Paris, France" or "University of Lagos"'
+            }), 404
             
+    except requests.Timeout:
+        return jsonify({
+            'success': False, 
+            'error': 'Search timed out. Please try again.'
+        }), 504
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"Search error: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': 'Search failed. Check your connection.'
+        }), 500
 
 @app.route('/api/route', methods=['POST'])
 def get_route():
@@ -73,13 +101,14 @@ def get_route():
         url = f'https://router.project-osrm.org/route/v1/{osrm_profile}/{start["lon"]},{start["lat"]};{end["lon"]},{end["lat"]}'
         params = {
             'overview': 'full',
-            'geometries': 'geojson'
+            'geometries': 'geojson',
+            'steps': 'true'
         }
         
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=10)
         route_data = response.json()
         
-        if route_data['code'] == 'Ok':
+        if route_data.get('code') == 'Ok' and route_data.get('routes'):
             route = route_data['routes'][0]
             return jsonify({
                 'success': True,
@@ -90,10 +119,22 @@ def get_route():
                 }
             })
         else:
-            return jsonify({'success': False, 'error': 'Route not found'}), 404
+            return jsonify({
+                'success': False, 
+                'error': 'Route not found'
+            }), 404
             
+    except requests.Timeout:
+        return jsonify({
+            'success': False, 
+            'error': 'Route calculation timed out'
+        }), 504
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"Route error: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': 'Route calculation failed'
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
