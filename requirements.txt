@@ -1,0 +1,2 @@
+Flask==2.3.3  # Or the latest version you used
+gunicorn==21.2.0 # Or a recent stable version
