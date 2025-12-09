@@ -13,7 +13,7 @@ def index():
 
 @app.route('/api/search', methods=['POST'])
 def search_location():
-    """Search for a location using Nominatim API"""
+    """Search for a location using multiple geocoding services"""
     global last_request_time
     
     data = request.json
@@ -22,21 +22,41 @@ def search_location():
     if not query:
         return jsonify({'error': 'No query provided'}), 400
     
+    # Respect rate limiting (1 request per second)
+    current_time = time.time()
+    time_since_last = current_time - last_request_time
+    if time_since_last < 1.0:
+        time.sleep(1.0 - time_since_last)
+    
+    last_request_time = time.time()
+    
+    # Try multiple geocoding services
+    result = try_nominatim(query)
+    if result:
+        return jsonify(result)
+    
+    result = try_photon(query)
+    if result:
+        return jsonify(result)
+    
+    result = try_locationiq(query)
+    if result:
+        return jsonify(result)
+    
+    # If all fail, return error
+    return jsonify({
+        'success': False, 
+        'error': 'Location not found. Try being more specific (e.g., "Lagos, Nigeria")'
+    }), 404
+
+def try_nominatim(query):
+    """Try Nominatim geocoding"""
     try:
-        # Respect rate limiting (1 request per second)
-        current_time = time.time()
-        time_since_last = current_time - last_request_time
-        if time_since_last < 1.0:
-            time.sleep(1.0 - time_since_last)
-        
-        last_request_time = time.time()
-        
-        # Using Nominatim for geocoding
         url = 'https://nominatim.openstreetmap.org/search'
         params = {
             'q': query,
             'format': 'json',
-            'limit': 5,  # Get more results
+            'limit': 5,
             'addressdetails': 1,
             'accept-language': 'en'
         }
@@ -44,37 +64,87 @@ def search_location():
             'User-Agent': 'Mappy-App/1.0 (Educational Project)'
         }
         
-        response = requests.get(url, params=params, headers=headers, timeout=10)
+        response = requests.get(url, params=params, headers=headers, timeout=5)
         results = response.json()
         
         if results and len(results) > 0:
-            # Return the best result
             location = results[0]
-            return jsonify({
+            return {
                 'success': True,
                 'location': {
                     'lat': float(location['lat']),
                     'lon': float(location['lon']),
                     'display_name': location['display_name']
                 }
-            })
-        else:
-            return jsonify({
-                'success': False, 
-                'error': 'Location not found. Try: "Paris, France" or "University of Lagos"'
-            }), 404
-            
-    except requests.Timeout:
-        return jsonify({
-            'success': False, 
-            'error': 'Search timed out. Please try again.'
-        }), 504
+            }
     except Exception as e:
-        print(f"Search error: {str(e)}")
-        return jsonify({
-            'success': False, 
-            'error': 'Search failed. Check your connection.'
-        }), 500
+        print(f"Nominatim error: {str(e)}")
+    return None
+
+def try_photon(query):
+    """Try Photon geocoding (alternative OSM-based service)"""
+    try:
+        url = 'https://photon.komoot.io/api/'
+        params = {
+            'q': query,
+            'limit': 5,
+            'lang': 'en'
+        }
+        
+        response = requests.get(url, params=params, timeout=5)
+        data = response.json()
+        
+        if data.get('features') and len(data['features']) > 0:
+            feature = data['features'][0]
+            coords = feature['geometry']['coordinates']
+            properties = feature.get('properties', {})
+            
+            # Build display name
+            name_parts = []
+            for key in ['name', 'city', 'state', 'country']:
+                if properties.get(key):
+                    name_parts.append(properties[key])
+            display_name = ', '.join(name_parts) if name_parts else query
+            
+            return {
+                'success': True,
+                'location': {
+                    'lat': float(coords[1]),
+                    'lon': float(coords[0]),
+                    'display_name': display_name
+                }
+            }
+    except Exception as e:
+        print(f"Photon error: {str(e)}")
+    return None
+
+def try_locationiq(query):
+    """Try LocationIQ (no API key needed for basic search)"""
+    try:
+        url = 'https://us1.locationiq.com/v1/search'
+        params = {
+            'q': query,
+            'format': 'json',
+            'limit': 5,
+            'key': 'pk.0f147952a41c555a5b70614039fd148b'  # Free public key
+        }
+        
+        response = requests.get(url, params=params, timeout=5)
+        results = response.json()
+        
+        if results and len(results) > 0 and not isinstance(results, dict):
+            location = results[0]
+            return {
+                'success': True,
+                'location': {
+                    'lat': float(location['lat']),
+                    'lon': float(location['lon']),
+                    'display_name': location['display_name']
+                }
+            }
+    except Exception as e:
+        print(f"LocationIQ error: {str(e)}")
+    return None
 
 @app.route('/api/route', methods=['POST'])
 def get_route():
